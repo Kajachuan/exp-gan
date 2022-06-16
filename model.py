@@ -1,4 +1,3 @@
-from turtle import forward
 import torch
 import torch.nn as nn
 from blocks import *
@@ -14,13 +13,13 @@ class Model(nn.Module):
         self.encoders.extend([EncoderBlock(2**(layers + 2), 2**(layers + 3), dropout=0.5)])
         self.encoders.extend([EncoderBlock(2**(layers + 3), 2**(layers + 4), dropout=0.5, pooling=False)])
 
-        self.out_enc_size = bins // (layers - 1)
+        self.out_enc_size = bins // (2 ** (layers - 1))
 
-        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size, hidden_size=1024)
-        self.linear = ComplexLinear(in_features=1024, out_features=self.out_enc_size)
+        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 4)), hidden_size=512)
+        self.linear = ComplexLinear(in_features=512, out_features=self.out_enc_size * (2 ** (self.layers + 4)))
 
         self.decoders = nn.ModuleList([DecoderBlock(2**i, 2**(i-1), 2**(i-1)) 
-                                       for i in range(layers + 4, 4, -1)])
+                                       for i in range(layers + 4, 5, -1)])
 
         self.conv = ComplexConv2d(32, 16, 3, 1)
         self.relu = ComplexReLU()
@@ -38,17 +37,17 @@ class Model(nn.Module):
         batch_size = z_real.size(0)
 
         for i in range(self.layers - 1):
+            sizes.append(z_real.size())
             ((z_real, z_imag), idx), skip = self.encoders[i](z_real, z_imag)
             indices.append(idx)
             residual.append(skip)
-            sizes.append(skip[0].size())
 
-        z_real, z_imag = self.encoders[self.layers - 1](z_real, z_imag)
+        z_real, z_imag = self.encoders[-1](z_real, z_imag)
 
         z_real = z_real.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 4)))
         z_imag = z_imag.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 4)))
 
-        z_real, z_imag = self.lstm(z_real, z_imag)
+        (z_real, z_imag), _ = self.lstm(z_real, z_imag)
         z_real, z_imag = self.linear(z_real, z_imag)
 
         z_real = z_real.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 4))).transpose(1, 3)
@@ -59,12 +58,16 @@ class Model(nn.Module):
             skip_real, skip_imag = residual.pop()
             output_size = sizes.pop()
             z_real, z_imag = self.decoders[i](z_real, z_imag,
-                                              indice_real, indice_imag,
+                                              torch.repeat_interleave(indice_real, 2, dim=1), 
+                                              torch.repeat_interleave(indice_imag, 2, dim=1),
                                               skip_real, skip_imag,
                                               output_size)
         z_real, z_imag = self.conv(z_real, z_imag)
         z_real, z_imag = self.relu(z_real, z_imag)
         z_real, z_imag = self.out_conv(z_real, z_imag)
         z_real, z_imag = self.sigmoid(z_real, z_imag)
-        return z_real * orig_real - z_imag * orig_imag, \
-               z_real * orig_imag + z_imag * orig_real
+        z_real = z_real.reshape(z_real.size(0), 4, 2, z_real.size(2), z_real.size(3)).transpose(0,1)
+        z_imag = z_imag.reshape(z_imag.size(0), 4, 2, z_imag.size(2), z_imag.size(3)).transpose(0,1)
+        out_real = z_real * orig_real - z_imag * orig_imag
+        out_imag = z_real * orig_imag + z_imag * orig_real
+        return out_real.transpose(0,1), out_imag.transpose(0,1)
