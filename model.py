@@ -15,8 +15,8 @@ class Model(nn.Module):
 
         self.out_enc_size = bins // (2 ** (layers - 1))
 
-        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 3)), hidden_size=512)
-        self.linear = ComplexLinear(in_features=512, out_features=self.out_enc_size * (2 ** (self.layers + 3)))
+        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 3)), hidden_size=256)
+        self.linear = ComplexLinear(in_features=256, out_features=self.out_enc_size * (2 ** (self.layers + 3)))
 
         self.decoders = nn.ModuleList([DecoderBlock(2**i, 2**(i-1), 2**(i-1)) 
                                        for i in range(layers + 3, 4, -1)])
