@@ -21,9 +21,9 @@ class Model(nn.Module):
         self.decoders = nn.ModuleList([DecoderBlock(2**i, 2**(i-1), 2**(i-1)) 
                                        for i in range(layers + 3, 4, -1)])
 
-        self.conv = ComplexConv2d(32, 16, 3, 1)
+        self.conv = ComplexConv2d(16, 8, 3, 1)
         self.relu = ComplexReLU()
-        self.out_conv = ComplexConv2d(16, 8, 1)
+        self.out_conv = ComplexConv2d(8, 8, 1)
         self.sigmoid = ComplexSigmoid()
 
     def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor):
