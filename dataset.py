@@ -75,6 +75,7 @@ class MUSDB18Dataset(Dataset):
             sources = []
             for source in self.stems:
                 audio = track.sources[source].audio.T
+                audio = torch.as_tensor(audio.copy(), dtype=torch.float32)
                 stft = torch.stft(audio, n_fft=self.nfft, window=self.window,
                                   onesided=True, return_complex=True)
                 sources.append(stft)
