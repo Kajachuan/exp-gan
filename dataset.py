@@ -80,7 +80,8 @@ class MUSDB18Dataset(Dataset):
                                   onesided=True, return_complex=True)
                 sources.append(stft)
 
-            x = torch.stft(track.audio.T, n_fft=self.nfft, window=self.window,
+            track = torch.as_tensor(track.audio.T.copy(), dtype=torch.float32)
+            x = torch.stft(track, n_fft=self.nfft, window=self.window,
                            onesided=True, return_complex=True)
             y = torch.stack(sources, dim=0)
         return (torch.real(x), torch.imag(x)), (torch.real(y), torch.imag(y))
