@@ -74,10 +74,10 @@ def main():
     model_args = [args.layers, args.nfft // 2 + 1 ]
     network = Model(*model_args).to(device)
 
-    train_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="train",
-                                    duration=args.duration, samples=args.samples, random=True)
-    valid_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="valid",
-                                    duration=None, samples=1, random=False, partitions=args.partitions)
+    train_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="train", duration=args.duration,
+                                   nfft=args.nfft, samples=args.samples, random=True)
+    valid_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="valid", duration=None,
+                                   nfft=args.nfft, samples=1, random=False, partitions=args.partitions)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=1, num_workers=args.workers, pin_memory=True)
