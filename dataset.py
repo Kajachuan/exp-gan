@@ -82,7 +82,7 @@ class MUSDB18Dataset(Dataset):
             x = torch.stft(track.audio.T, n_fft=self.nfft, window=self.window,
                            onesided=True, return_complex=True)
             y = torch.stack(sources, dim=0)
-        return (x.real(), x.imag()), (y.real(), y.imag())
+        return (torch.real(x), torch.imag(x)), (torch.real(y), torch.imag(y))
 
     def __len__(self) -> int:
         return len(self.mus) * self.samples * self.partitions
