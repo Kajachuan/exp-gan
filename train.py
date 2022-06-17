@@ -57,7 +57,6 @@ def main():
     parser.add_argument("--output", type=str, help="Directorio de salida")
     parser.add_argument("--root", type=str, help="Ruta del dataset")
     parser.add_argument("--samples", type=int, default=1, help="Muestras por cancion")
-    parser.add_argument("--target", type=str, default="vocals", help="Instrumento a separar")
     parser.add_argument("--weight-decay", type=float, default=0, help="Decaimiento de los pesos de Adam")
     parser.add_argument("--workers", type=int, default=0, help="Número de workers para cargar los datos")
 
@@ -86,7 +85,7 @@ def main():
     scheduler = ReduceLROnPlateau(optimizer, factor=0.5, patience=10, verbose=True)
 
     if args.checkpoint:
-        state = torch.load(f"{args.checkpoint}/{args.target}/last_checkpoint.pt", map_location=device)
+        state = torch.load(f"{args.checkpoint}/last_checkpoint.pt", map_location=device)
         network.load_state_dict(state["state_dict"])
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
