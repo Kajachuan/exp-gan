@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--checkpoint", type=str, help="Directorio de los checkpoints")
     parser.add_argument("--duration", type=float, default=5.0, help="Duración de cada canción")
     parser.add_argument("--epochs", type=int, default=10, help="Número de épocas")
+    parser.add_argument("--layers", type=int, default=5, help="Número de capas")
     parser.add_argument("--learning-rate", type=float, default=0.001, help="Tasa de aprendizaje")
     parser.add_argument("--nfft", type=int, default=4096, help="Tamaño de la FFT del STFT")
     parser.add_argument("--output", type=str, help="Directorio de salida")
