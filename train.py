@@ -29,7 +29,7 @@ def train(network, train_loader, device, optimizer):
         count += y_real.size(0)
     return batch_loss / count
 
-def valid(network, valid_loader, device, stft):
+def valid(network, valid_loader, device):
     batch_loss, count = 0, 0
     network.eval()
     with torch.no_grad():
