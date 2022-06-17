@@ -8,18 +8,18 @@ class Model(nn.Module):
     def __init__(self, layers: int, bins: int) -> None:
         super(Model, self).__init__()
         self.layers = layers
-        self.encoders = nn.ModuleList([EncoderBlock(2, 32)])
-        self.encoders.extend([EncoderBlock(2**(5 + i), 2**(6 + i)) for i in range(layers - 3)])
-        self.encoders.extend([EncoderBlock(2**(layers + 2), 2**(layers + 3), dropout=0.5)])
-        self.encoders.extend([EncoderBlock(2**(layers + 3), 2**(layers + 4), dropout=0.5, pooling=False)])
+        self.encoders = nn.ModuleList([EncoderBlock(2, 16)])
+        self.encoders.extend([EncoderBlock(2**(4 + i), 2**(5 + i)) for i in range(layers - 3)])
+        self.encoders.extend([EncoderBlock(2**(layers + 1), 2**(layers + 2), dropout=0.5)])
+        self.encoders.extend([EncoderBlock(2**(layers + 2), 2**(layers + 3), dropout=0.5, pooling=False)])
 
         self.out_enc_size = bins // (2 ** (layers - 1))
 
-        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 4)), hidden_size=512)
-        self.linear = ComplexLinear(in_features=512, out_features=self.out_enc_size * (2 ** (self.layers + 4)))
+        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 3)), hidden_size=512)
+        self.linear = ComplexLinear(in_features=512, out_features=self.out_enc_size * (2 ** (self.layers + 3)))
 
         self.decoders = nn.ModuleList([DecoderBlock(2**i, 2**(i-1), 2**(i-1)) 
-                                       for i in range(layers + 4, 5, -1)])
+                                       for i in range(layers + 3, 4, -1)])
 
         self.conv = ComplexConv2d(32, 16, 3, 1)
         self.relu = ComplexReLU()
@@ -44,14 +44,14 @@ class Model(nn.Module):
 
         z_real, z_imag = self.encoders[-1](z_real, z_imag)
 
-        z_real = z_real.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 4)))
-        z_imag = z_imag.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 4)))
+        z_real = z_real.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
+        z_imag = z_imag.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
 
         (z_real, z_imag), _ = self.lstm(z_real, z_imag)
         z_real, z_imag = self.linear(z_real, z_imag)
 
-        z_real = z_real.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 4))).transpose(1, 3)
-        z_imag = z_imag.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 4))).transpose(1, 3)
+        z_real = z_real.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3))).transpose(1, 3)
+        z_imag = z_imag.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3))).transpose(1, 3)
 
         for i in range(self.layers - 1):
             indice_real, indice_imag = indices.pop()
