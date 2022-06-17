@@ -4,7 +4,7 @@ import torch.nn as nn
 from typing import Tuple
 
 def magnitude(z_real: torch.Tensor, z_imag: torch.Tensor) -> torch.Tensor:
-    return torch.sqrt(z_real ** 2 + z_imag ** 2)
+    return torch.sqrt(z_real ** 2 + z_imag ** 2 + 1e-14)
 
 def complex_tanh(z_real: torch.Tensor, z_imag: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     mag = torch.clamp(magnitude(z_real, z_imag), min=1e-8)
