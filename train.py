@@ -13,20 +13,20 @@ def train(network, train_loader, device, optimizer):
     batch_loss, count = 0, 0
     network.train()
     pbar = tqdm.tqdm(train_loader)
-    for (x_real, x_imag), (y_real, y_imag) in pbar:
+    for x, y in pbar:
         pbar.set_description("Entrenando batch")
-        x_real, x_imag = x_real.to(device, non_blocking=True), x_imag.to(device, non_blocking=True)
-        y_real, y_imag = y_real.to(device, non_blocking=True), y_imag.to(device, non_blocking=True)
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
         
         optimizer.zero_grad()
 
-        y_hat_real, y_hat_imag = network(x_real, x_imag)
+        y_hat = network(x)
 
-        loss = mse_loss(y_hat_real, y_real) + mse_loss(y_hat_imag, y_imag)
+        loss = mse_loss(y_hat, y)
         loss.backward()
         optimizer.step()
-        batch_loss += loss.item() * y_real.size(0)
-        count += y_real.size(0)
+        batch_loss += loss.item() * y.size(0)
+        count += y.size(0)
     return batch_loss / count
 
 def valid(network, valid_loader, device):
@@ -34,16 +34,16 @@ def valid(network, valid_loader, device):
     network.eval()
     with torch.no_grad():
         pbar = tqdm.tqdm(valid_loader)
-        for (x_real, x_imag), (y_real, y_imag) in pbar:
+        for x, y in pbar:
             pbar.set_description("Validando")
-            x_real, x_imag = x_real.to(device, non_blocking=True), x_imag.to(device, non_blocking=True)
-            y_real, y_imag = y_real.to(device, non_blocking=True), y_imag.to(device, non_blocking=True)
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
 
-            y_hat_real, y_hat_imag = network(x_real, x_imag)
+            y_hat = network(x)
 
-            loss = mse_loss(y_hat_real, y_real) + mse_loss(y_hat_imag, y_imag)
-            batch_loss += loss.item() * y_real.size(0)
-            count += y_real.size(0)
+            loss = mse_loss(y_hat, y)
+            batch_loss += loss.item() * y.size(0)
+            count += y.size(0)
         return batch_loss / count
 
 def main():
@@ -57,34 +57,35 @@ def main():
     parser.add_argument("--nfft", type=int, default=4096, help="Tamaño de la FFT del STFT")
     parser.add_argument("--output", type=str, help="Directorio de salida")
     parser.add_argument("--partitions", type=int, default=1, help="Número de partes de las canciones de validación")
+    parser.add_argument("--patience", type=str, help="Cantidad máxima de iteraciones sin mejora")
     parser.add_argument("--root", type=str, help="Ruta del dataset")
     parser.add_argument("--samples", type=int, default=1, help="Muestras por cancion")
     parser.add_argument("--weight-decay", type=float, default=0, help="Decaimiento de los pesos de Adam")
     parser.add_argument("--workers", type=int, default=0, help="Número de workers para cargar los datos")
 
-    subparsers = parser.add_subparsers(help="Tipo de modelo", dest="model")
-
     args = parser.parse_args()
-
-    torch.autograd.set_detect_anomaly(True)
 
     use_cuda = torch.cuda.is_available()
     print("GPU disponible:", use_cuda)
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    model_args = [args.layers, args.nfft // 2 + 1 ]
+    model_args = [args.layers, args.nfft]
     network = Model(*model_args).to(device)
 
-    train_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="train", duration=args.duration,
-                                   nfft=args.nfft, samples=args.samples, random=True)
-    valid_dataset = MUSDB18Dataset(base_path=args.root, subset="train", split="valid", duration=None,
-                                   nfft=args.nfft, samples=1, random=False, partitions=args.partitions)
+    train_dataset = MUSDB18Dataset(root=args.root, is_wav=True, 
+                                   subset="train", split="train", 
+                                   duration=args.duration, nfft=args.nfft, 
+                                   samples=args.samples, random=True)
+    valid_dataset = MUSDB18Dataset(root=args.root, is_wav=True, 
+                                   subset="train", split="valid", 
+                                   duration=None, nfft=args.nfft, 
+                                   samples=1, random=False, partitions=args.partitions)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=1, num_workers=args.workers, pin_memory=True)
 
     optimizer = Adam(network.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    scheduler = ReduceLROnPlateau(optimizer, factor=0.5, patience=10, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, factor=0.5, patience=args.patience, verbose=True)
 
     if args.checkpoint:
         state = torch.load(f"{args.checkpoint}/last_checkpoint.pt", map_location=device)

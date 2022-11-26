@@ -9,21 +9,21 @@ class MUSDB18Dataset(Dataset):
     """
     Dataset MUSDB18
     """
-    def __init__(self, base_path: str, subset: str, split: str, 
-                 duration: Optional[float], nfft: int, samples: int = 1, 
-                 random: bool = False, partitions: int = 1) -> None:
-        """
-        base_path -- Ruta del dataset
-        subset -- Nombre del conjunto: 'train' o 'test'
-        split -- División del entrenamiento: 'train' o 'valid' cuando subset='train'
-        duration -- Duración de cada canción en segundos
-        nfft -- Cantidad de puntos de la fft
-        samples -- Cantidad de muestras de cada cancion
-        random -- True si se van a mezclar las canciones de forma aleatoria
-        partitions -- Cantidad de particiones de las canciones de validación
-        """
+    def __init__(
+        self, 
+        root: str,
+        is_wav: bool,
+        subset: str, 
+        split: str, 
+        duration: Optional[float], 
+        nfft: int, 
+        samples: int = 1, 
+        random: bool = False, 
+        partitions: int = 1
+    ) -> None:
+
         super(MUSDB18Dataset, self).__init__()
-        self.sample_rate = 44100 # Por ahora no se usa
+        self.sample_rate = 44100
         self.split = split
         self.duration = duration
         self.nfft = nfft
@@ -32,7 +32,7 @@ class MUSDB18Dataset(Dataset):
         self.partitions = partitions
         self.window = torch.hann_window(nfft)
         self.stems = ['vocals', 'drums', 'bass', 'other']
-        self.mus = musdb.DB(root=base_path, subsets=subset, split=split)
+        self.mus = musdb.DB(root=root, is_wav=is_wav, subsets=subset, split=split)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.split == 'train' and self.duration:
@@ -84,7 +84,7 @@ class MUSDB18Dataset(Dataset):
             x = torch.stft(track, n_fft=self.nfft, window=self.window,
                            onesided=True, return_complex=True)
             y = torch.stack(sources, dim=0)
-        return (torch.real(x), torch.imag(x)), (torch.real(y), torch.imag(y))
+        return torch.view_as_real(x), torch.view_as_real(y)
 
     def __len__(self) -> int:
         return len(self.mus) * self.samples * self.partitions

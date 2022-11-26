@@ -18,36 +18,24 @@ class ComplexLSTMLayer(nn.Module):
         self.hidden_size = hidden_size
 
         # i_t
-        self.W_zi_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_zi_imag = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_hi_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.W_hi_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.b_i_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_i_imag = nn.Parameter(torch.Tensor(hidden_size))
+        self.W_zi = nn.Parameter(torch.Tensor(input_size, hidden_size, 2))
+        self.W_hi = nn.Parameter(torch.Tensor(hidden_size, hidden_size, 2))
+        self.b_i = nn.Parameter(torch.Tensor(hidden_size))
         
         # f_t
-        self.W_zf_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_zf_imag = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_hf_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.W_hf_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.b_f_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_f_imag = nn.Parameter(torch.Tensor(hidden_size))
+        self.W_zf = nn.Parameter(torch.Tensor(input_size, hidden_size, 2))
+        self.W_hf = nn.Parameter(torch.Tensor(hidden_size, hidden_size, 2))
+        self.b_f = nn.Parameter(torch.Tensor(hidden_size))
 
         # c_t
-        self.W_zc_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_zc_imag = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_hc_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.W_hc_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.b_c_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_c_imag = nn.Parameter(torch.Tensor(hidden_size))
+        self.W_zc = nn.Parameter(torch.Tensor(input_size, hidden_size, 2))
+        self.W_hc = nn.Parameter(torch.Tensor(hidden_size, hidden_size, 2))
+        self.b_c = nn.Parameter(torch.Tensor(hidden_size, 2))
         
         # o_t
-        self.W_zo_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_zo_imag = nn.Parameter(torch.Tensor(input_size, hidden_size))
-        self.W_ho_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.W_ho_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
-        self.b_o_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_o_imag = nn.Parameter(torch.Tensor(hidden_size))
+        self.W_zo = nn.Parameter(torch.Tensor(input_size, hidden_size, 2))
+        self.W_ho = nn.Parameter(torch.Tensor(hidden_size, hidden_size, 2))
+        self.b_o = nn.Parameter(torch.Tensor(hidden_size))
 
         self.init_weights()
 
@@ -56,52 +44,49 @@ class ComplexLSTMLayer(nn.Module):
         for weight in self.parameters():
             weight.data.uniform_(-stdv, stdv)
 
-    def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor) -> \
-            Tuple[Tuple[torch.Tensor, torch.Tensor], 
-            Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
-        batch_size, seq_size, _ = z_real.size()
-        hidden_seq_real, hidden_seq_imag = [], []
-        h_t_real = torch.zeros(batch_size, self.hidden_size).to(z_real.device)
-        h_t_imag = torch.zeros(batch_size, self.hidden_size).to(z_imag.device)
-        c_t_real = torch.zeros(batch_size, self.hidden_size).to(z_real.device)
-        c_t_imag = torch.zeros(batch_size, self.hidden_size).to(z_imag.device)
+    def forward(self, z: torch.Tensor) -> \
+            Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        batch_size, seq_size, _, _ = z.size()
+        hidden_seq = []
+        h_t = torch.zeros(batch_size, self.hidden_size, 2).to(z.device)
+        c_t = torch.zeros(batch_size, self.hidden_size, 2).to(z.device)
         for t in range(seq_size):
-            z_t_real = z_real[:, t, :]
-            z_t_imag = z_imag[:, t, :]
+            z_t = z[:, t, ...]
             
-            i_t = torch.sigmoid(z_t_real @ self.W_zi_real - z_t_imag @ self.W_zi_imag + \
-                                h_t_real @ self.W_hi_real - h_t_imag @ self.W_hi_imag + \
-                                self.b_i_real)
+            i_t = torch.sigmoid(z_t[...,0] @ self.W_zi[...,0] - z_t[...,1] @ self.W_zi[...,1] + \
+                                h_t[...,0] @ self.W_hi[...,0] - h_t[...,1] @ self.W_hi[...,1] + \
+                                self.b_i)
             
-            f_t = torch.sigmoid(z_t_real @ self.W_zf_real - z_t_imag @ self.W_zf_imag + \
-                                h_t_real @ self.W_hf_real - h_t_imag @ self.W_hf_imag + \
-                                self.b_f_real)
+            f_t = torch.sigmoid(z_t[...,0] @ self.W_zf[...,0] - z_t[...,1] @ self.W_zf[...,1] + \
+                                h_t[...,0] @ self.W_hf[...,0] - h_t[...,1] @ self.W_hf[...,1] + \
+                                self.b_f)
             
-            o_t = torch.sigmoid(z_t_real @ self.W_zo_real - z_t_imag @ self.W_zo_imag + \
-                                h_t_real @ self.W_ho_real - h_t_imag @ self.W_ho_imag + \
-                                self.b_o_real)
+            o_t = torch.sigmoid(z_t[...,0] @ self.W_zo[...,0] - z_t[...,1] @ self.W_zo[...,1] + \
+                                h_t[...,0] @ self.W_ho[...,0] - h_t[...,1] @ self.W_ho[...,1] + \
+                                self.b_o)
 
-            c_tilde_t_real = z_t_real @ self.W_zc_real - z_t_imag @ self.W_zc_imag + \
-                             h_t_real @ self.W_hc_real - h_t_imag @ self.W_hc_imag + \
-                             self.b_c_real
-            c_tilde_t_imag = z_t_imag @ self.W_zc_real + z_t_real @ self.W_zc_imag + \
-                             h_t_imag @ self.W_hc_real + h_t_real @ self.W_hc_imag + \
-                             self.b_c_imag
+            c_tilde_t_real = z_t[...,0] @ self.W_zc[...,0] - z_t[...,1] @ self.W_zc[...,1] + \
+                             h_t[...,0] @ self.W_hc[...,0] - h_t[...,1] @ self.W_hc[...,1] + \
+                             self.b_c[...,0]
+            c_tilde_t_imag = z_t[...,1] @ self.W_zc[...,0] + z_t[...,0] @ self.W_zc[...,1] + \
+                             h_t[...,1] @ self.W_hc[...,0] + h_t[...,0] @ self.W_hc[...,1] + \
+                             self.b_c[...,1]
             c_tilde_t_real, c_tilde_t_imag = complex_tanh(c_tilde_t_real, c_tilde_t_imag)
 
-            c_t_real = f_t * c_t_real + i_t * c_tilde_t_real
-            c_t_imag = f_t * c_t_imag + i_t * c_tilde_t_imag
+            c_t_real = f_t * c_t[...,0] + i_t * c_tilde_t_real
+            c_t_imag = f_t * c_t[...,1] + i_t * c_tilde_t_imag
+
+            c_t = torch.stack((c_t_real, c_t_imag), dim=-1)
 
             h_t_real, h_t_imag = complex_tanh(c_t_real, c_t_imag)
             h_t_real *= o_t
             h_t_imag *= o_t
 
-            hidden_seq_real.append(h_t_real.unsqueeze(0))
-            hidden_seq_imag.append(h_t_imag.unsqueeze(0))
+            h_t = torch.stack((h_t_real, h_t_imag), dim=-1)
 
-        hidden_seq_real = torch.cat(hidden_seq_real, dim=0)
-        hidden_seq_real = hidden_seq_real.transpose(0, 1).contiguous()
-        hidden_seq_imag = torch.cat(hidden_seq_imag, dim=0)
-        hidden_seq_imag = hidden_seq_imag.transpose(0, 1).contiguous()
+            hidden_seq.append(h_t.unsqueeze(0))
 
-        return (hidden_seq_real, hidden_seq_imag), ((h_t_real, h_t_imag), (c_t_real, c_t_imag))
+        hidden_seq = torch.cat(hidden_seq, dim=0)
+        hidden_seq = hidden_seq.transpose(0, 1).contiguous()
+
+        return hidden_seq, (h_t, c_t)

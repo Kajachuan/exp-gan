@@ -5,8 +5,11 @@ from lstm import ComplexLSTMLayer
 from utils import *
 
 class Model(nn.Module):
-    def __init__(self, layers: int, bins: int) -> None:
+    def __init__(self, layers: int, nfft: int) -> None:
         super(Model, self).__init__()
+
+        bins = nfft // 2 + 1
+
         self.layers = layers
         self.encoders = nn.ModuleList([EncoderBlock(2, 16)])
         self.encoders.extend([EncoderBlock(2**(4 + i), 2**(5 + i)) for i in range(layers - 3)])
@@ -22,52 +25,44 @@ class Model(nn.Module):
                                        for i in range(layers + 3, 4, -1)])
 
         self.conv = ComplexConv2d(16, 8, 3, 1)
-        self.relu = ComplexReLU()
+        self.relu = nn.ReLU()
         self.out_conv = ComplexConv2d(8, 8, 1)
-        self.sigmoid = ComplexSigmoid()
+        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor):
+    def forward(self, z: torch.Tensor):
         indices = []
         residual = []
         sizes = []
 
-        orig_real = torch.clone(z_real)
-        orig_imag = torch.clone(z_imag)
+        orig = torch.clone(z)
 
-        batch_size = z_real.size(0)
+        batch_size = z.size(0)
 
         for i in range(self.layers - 1):
-            sizes.append(z_real.size())
-            ((z_real, z_imag), idx), skip = self.encoders[i](z_real, z_imag)
+            sizes.append(z[...,0].size())
+            (z, idx), skip = self.encoders[i](z)
             indices.append(idx)
             residual.append(skip)
 
-        z_real, z_imag = self.encoders[-1](z_real, z_imag)
+        z = self.encoders[-1](z)
 
-        z_real = z_real.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
-        z_imag = z_imag.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
+        z = z.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)), 2)
 
-        (z_real, z_imag), _ = self.lstm(z_real, z_imag)
-        z_real, z_imag = self.linear(z_real, z_imag)
+        z, _ = self.lstm(z)
+        z = self.linear(z)
 
-        z_real = z_real.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3))).transpose(1, 3)
-        z_imag = z_imag.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3))).transpose(1, 3)
+        z = z.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3)), 2).transpose(1, 3)
 
         for i in range(self.layers - 1):
-            indice_real, indice_imag = indices.pop()
-            skip_real, skip_imag = residual.pop()
+            idx = indices.pop()
+            skip = residual.pop()
             output_size = sizes.pop()
-            z_real, z_imag = self.decoders[i](z_real, z_imag,
-                                              torch.repeat_interleave(indice_real, 2, dim=1), 
-                                              torch.repeat_interleave(indice_imag, 2, dim=1),
-                                              skip_real, skip_imag,
-                                              output_size)
-        z_real, z_imag = self.conv(z_real, z_imag)
-        z_real, z_imag = self.relu(z_real, z_imag)
-        z_real, z_imag = self.out_conv(z_real, z_imag)
-        z_real, z_imag = self.sigmoid(z_real, z_imag)
-        z_real = z_real.reshape(z_real.size(0), 4, 2, z_real.size(2), z_real.size(3)).transpose(0,1)
-        z_imag = z_imag.reshape(z_imag.size(0), 4, 2, z_imag.size(2), z_imag.size(3)).transpose(0,1)
-        out_real = z_real * orig_real - z_imag * orig_imag
-        out_imag = z_real * orig_imag + z_imag * orig_real
-        return out_real.transpose(0,1), out_imag.transpose(0,1)
+            z = self.decoders[i](z, torch.repeat_interleave(idx, 2, dim=1), skip, output_size)
+        z = self.conv(z)
+        z = self.relu(z)
+        z = self.out_conv(z)
+        z = self.sigmoid(z)
+        z = z.reshape(z.size(0), 4, 2, z.size(2), z.size(3), 2).transpose(0,1)
+        out_real = z[...,0] * orig[...,0] - z[...,1] * orig[...,1]
+        out_imag = z[...,0] * orig[...,1] + z[...,1] * orig[...,0]
+        return torch.stack((out_real, out_imag), dim=-1).transpose(0,1)
