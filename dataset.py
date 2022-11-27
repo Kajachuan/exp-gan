@@ -18,8 +18,7 @@ class MUSDB18Dataset(Dataset):
         duration: Optional[float], 
         nfft: int, 
         samples: int = 1, 
-        random: bool = False, 
-        partitions: int = 1
+        random: bool = False
     ) -> None:
 
         super(MUSDB18Dataset, self).__init__()
@@ -29,7 +28,6 @@ class MUSDB18Dataset(Dataset):
         self.nfft = nfft
         self.samples = samples
         self.random = random
-        self.partitions = partitions
         self.window = torch.hann_window(nfft)
         self.stems = ['vocals', 'drums', 'bass', 'other']
         self.mus = musdb.DB(root=root, is_wav=is_wav, subsets=subset, split=split)
@@ -63,11 +61,11 @@ class MUSDB18Dataset(Dataset):
 
         # Validación y Test
         else:
-            track = self.mus[index // self.partitions]
+            track = self.mus[index // self.samples]
 
-            chunk = track.duration // self.partitions
-            track.chunk_start = (index % self.partitions) * chunk
-            if (index + 1) % self.partitions == 0:
+            chunk = track.duration // self.samples
+            track.chunk_start = (index % self.samples) * chunk
+            if (index + 1) % self.samples == 0:
                 track.chunk_duration = track.duration - track.chunk_start
             else:
                 track.chunk_duration = chunk
@@ -87,4 +85,4 @@ class MUSDB18Dataset(Dataset):
         return torch.view_as_real(x), torch.view_as_real(y)
 
     def __len__(self) -> int:
-        return len(self.mus) * self.samples * self.partitions
+        return len(self.mus) * self.samples

@@ -1,7 +1,5 @@
-import argparse
-import os
-import torch
-import tqdm
+import argparse, os, torch, tqdm
+from accelerate import Accelerator
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -9,37 +7,31 @@ from torch.nn.functional import mse_loss
 from dataset import MUSDB18Dataset
 from model import Model
 
-def train(network, train_loader, device, optimizer):
-    batch_loss, count = 0, 0
-    network.train()
+def train(model, train_loader, optimizer, accelerator):
+    model.train()
     pbar = tqdm.tqdm(train_loader)
     for x, y in pbar:
         pbar.set_description("Entrenando batch")
-        x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
         
         optimizer.zero_grad()
 
-        y_hat = network(x)
+        y_hat = model(x)
 
         loss = mse_loss(y_hat, y)
-        loss.backward()
+        accelerator.backward(loss)
         optimizer.step()
-        batch_loss += loss.item() * y.size(0)
-        count += y.size(0)
-    return batch_loss / count
 
-def valid(network, valid_loader, device):
+def valid(model, valid_loader, accelerator):
     batch_loss, count = 0, 0
-    network.eval()
+    model.eval()
     with torch.no_grad():
         pbar = tqdm.tqdm(valid_loader)
         for x, y in pbar:
             pbar.set_description("Validando")
-            x = x.to(device, non_blocking=True)
-            y = y.to(device, non_blocking=True)
 
-            y_hat = network(x)
+            y_hat = model(x)
+
+            y_hat, y = accelerator.gather_for_metrics((y_hat, y))
 
             loss = mse_loss(y_hat, y)
             batch_loss += loss.item() * y.size(0)
@@ -61,16 +53,14 @@ def main():
     parser.add_argument("--root", type=str, help="Ruta del dataset")
     parser.add_argument("--samples", type=int, default=1, help="Muestras por cancion")
     parser.add_argument("--weight-decay", type=float, default=0, help="Decaimiento de los pesos de Adam")
-    parser.add_argument("--workers", type=int, default=0, help="Número de workers para cargar los datos")
 
     args = parser.parse_args()
 
-    use_cuda = torch.cuda.is_available()
-    print("GPU disponible:", use_cuda)
-    device = torch.device("cuda:0" if use_cuda else "cpu")
+    accelerator = Accelerator()
+    device = accelerator.device
 
     model_args = [args.layers, args.nfft]
-    network = Model(*model_args).to(device)
+    model = Model(*model_args).to(device)
 
     train_dataset = MUSDB18Dataset(root=args.root, is_wav=True, 
                                    subset="train", split="train", 
@@ -79,26 +69,24 @@ def main():
     valid_dataset = MUSDB18Dataset(root=args.root, is_wav=True, 
                                    subset="train", split="valid", 
                                    duration=None, nfft=args.nfft, 
-                                   samples=1, random=False, partitions=args.partitions)
+                                   samples=args.partitions, random=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=1, num_workers=args.workers, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=1)
 
-    optimizer = Adam(network.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, factor=0.5, patience=args.patience, verbose=True)
 
-    if args.checkpoint:
-        state = torch.load(f"{args.checkpoint}/last_checkpoint.pt", map_location=device)
-        network.load_state_dict(state["state_dict"])
-        optimizer.load_state_dict(state["optimizer"])
-        scheduler.load_state_dict(state["scheduler"])
+    model, optimizer, train_loader, valid_loader, scheduler = accelerator.prepare(model, optimizer, train_loader, valid_loader, scheduler)
+    accelerator.register_for_checkpointing(model, optimizer, scheduler)
 
-        train_losses = state["train_losses"]
-        valid_losses = state["valid_losses"]
-        initial_epoch = state["epoch"] + 1
-        best_loss = state["best_loss"]
+    if args.checkpoint:
+        accelerator.load_state(f"{args.checkpoint}/last_state")
+        metadata = torch.load(f"{args.checkpoint}/metadata")
+        valid_losses = metadata["valid_losses"]
+        initial_epoch = metadata["epoch"] + 1
+        best_loss = metadata["best_loss"]
     else:
-        train_losses = []
         valid_losses = []
         initial_epoch = 1
         best_loss = float("inf")
@@ -109,30 +97,31 @@ def main():
     t = tqdm.trange(initial_epoch, args.epochs + 1)
     for epoch in t:
         t.set_description("Entrenando iteración")
-        train_loss = train(network, train_loader, device, optimizer)
-        valid_loss = valid(network, valid_loader, device)
+        
+        train(model, train_loader, optimizer, accelerator)
+        valid_loss = valid(model, valid_loader, accelerator)
         scheduler.step(valid_loss)
-        train_losses.append(train_loss)
         valid_losses.append(valid_loss)
 
-        t.set_postfix(train_loss=train_loss, valid_loss=valid_loss)
+        t.set_postfix(valid_loss=valid_loss)
 
-        state = {
+        metadata = {
             "args": model_args,
             "epoch": epoch,
             "best_loss": best_loss,
-            "state_dict": network.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
-            "train_losses": train_losses,
             "valid_losses": valid_losses
         }
 
+        accelerator.wait_for_everyone()
+
         if valid_loss < best_loss:
             best_loss = valid_loss
-            state["best_loss"] = best_loss
-            torch.save(state, f"{out_path}/best_checkpoint.pt")
-        torch.save(state, f"{out_path}/last_checkpoint.pt")
+            metadata["best_loss"] = best_loss
+            unwrapped_model = accelerator.unwrap_model(model)
+            accelerator.save(unwrapped_model.state_dict(), f"{out_path}/model.pt")
+
+        accelerator.save_state(f"{out_path}/last_checkpoint.pt")
+        accelerator.save(metadata, f"{out_path}/metadata")
 
 if __name__ == '__main__':
     main()
