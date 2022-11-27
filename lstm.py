@@ -45,7 +45,7 @@ class ComplexLSTMLayer(nn.Module):
             weight.data.uniform_(-stdv, stdv)
 
     def forward(self, z: torch.Tensor) -> \
-            Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         batch_size, seq_size, _, _ = z.size()
         hidden_seq = []
         h_t = torch.zeros(batch_size, self.hidden_size, 2).to(z.device)
@@ -89,4 +89,16 @@ class ComplexLSTMLayer(nn.Module):
         hidden_seq = torch.cat(hidden_seq, dim=0)
         hidden_seq = hidden_seq.transpose(0, 1).contiguous()
 
-        return hidden_seq, (h_t, c_t)
+        return hidden_seq
+
+class ComplexBLSTMLayer(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int) -> None:
+        super(ComplexBLSTMLayer, self).__init__()
+        self.forward_layer = ComplexLSTMLayer(input_size, hidden_size)
+        self.reverse_layer = ComplexLSTMLayer(input_size, hidden_size)
+
+    def forward(self, z: torch.Tensor) -> \
+        Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        z_f = self.forward_layer(z)
+        z_r = self.reverse_layer(torch.flip(z, dims=(1,)))
+        return torch.cat((z_f, torch.flip(z_r, dims=(1,))), dim=-2)
