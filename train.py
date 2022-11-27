@@ -49,7 +49,7 @@ def main():
     parser.add_argument("--nfft", type=int, default=4096, help="Tamaño de la FFT del STFT")
     parser.add_argument("--output", type=str, help="Directorio de salida")
     parser.add_argument("--partitions", type=int, default=1, help="Número de partes de las canciones de validación")
-    parser.add_argument("--patience", type=str, help="Cantidad máxima de iteraciones sin mejora")
+    parser.add_argument("--patience", type=int, help="Cantidad máxima de iteraciones sin mejora")
     parser.add_argument("--root", type=str, help="Ruta del dataset")
     parser.add_argument("--samples", type=int, default=1, help="Muestras por cancion")
     parser.add_argument("--weight-decay", type=float, default=0, help="Decaimiento de los pesos de Adam")
