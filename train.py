@@ -34,6 +34,7 @@ def valid(model, valid_loader, accelerator):
             y_hat, y = accelerator.gather_for_metrics((y_hat, y))
 
             loss = mse_loss(y_hat, y)
+            accelerator.print(f"loss: ${loss}")
             batch_loss += loss.item() * y.size(0)
             count += y.size(0)
         return batch_loss / count
@@ -117,8 +118,7 @@ def main():
         if valid_loss < best_loss:
             best_loss = valid_loss
             metadata["best_loss"] = best_loss
-            unwrapped_model = accelerator.unwrap_model(model)
-            accelerator.save(unwrapped_model.state_dict(), f"{out_path}/model.pt")
+            accelerator.save(accelerator.get_state_dict(model), f"{out_path}/model.pt")
 
         accelerator.save_state(f"{out_path}/last_checkpoint.pt")
         accelerator.save(metadata, f"{out_path}/metadata")
