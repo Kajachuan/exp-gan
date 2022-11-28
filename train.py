@@ -34,7 +34,7 @@ def valid(model, valid_loader, accelerator):
             y_hat, y = accelerator.gather_for_metrics((y_hat, y))
 
             loss = mse_loss(y_hat, y)
-            accelerator.print(f"loss: ${loss}")
+            accelerator.print(f"loss: {loss}, NaN: (y_hat: {torch.any(torch.isnan(y_hat))}, y: {torch.any(torch.isnan(y_hat))})")
             batch_loss += loss.item() * y.size(0)
             count += y.size(0)
         return batch_loss / count
