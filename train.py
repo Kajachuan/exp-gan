@@ -25,7 +25,7 @@ def train(model, train_loader, optimizer, accelerator):
 def valid(model, valid_loader, accelerator):
     batch_loss, count = 0, 0
     model.eval()
-    loss_function = MSELoss()
+    loss_function = L1Loss()
     with torch.no_grad():
         pbar = tqdm.tqdm(valid_loader)
         for x, y in pbar:
