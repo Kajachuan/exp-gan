@@ -32,7 +32,7 @@ class MUSDB18Dataset(Dataset):
         self.partitions = partitions
         self.window = torch.hann_window(nfft)
         self.stems = ['vocals', 'drums', 'bass', 'other']
-        self.mus = musdb.DB(root=base_path, subsets=subset, split=split)
+        self.mus = musdb.DB(root=base_path, is_wav=True, subsets=subset, split=split)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.split == 'train' and self.duration:
