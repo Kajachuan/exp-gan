@@ -23,7 +23,6 @@ class ComplexLSTMLayer(nn.Module):
         self.W_hi_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.W_hi_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.b_i_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_i_imag = nn.Parameter(torch.Tensor(hidden_size))
         
         # f_t
         self.W_zf_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
@@ -31,7 +30,6 @@ class ComplexLSTMLayer(nn.Module):
         self.W_hf_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.W_hf_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.b_f_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_f_imag = nn.Parameter(torch.Tensor(hidden_size))
 
         # c_t
         self.W_zc_real = nn.Parameter(torch.Tensor(input_size, hidden_size))
@@ -47,7 +45,6 @@ class ComplexLSTMLayer(nn.Module):
         self.W_ho_real = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.W_ho_imag = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         self.b_o_real = nn.Parameter(torch.Tensor(hidden_size))
-        self.b_o_imag = nn.Parameter(torch.Tensor(hidden_size))
 
         self.init_weights()
 
@@ -56,9 +53,7 @@ class ComplexLSTMLayer(nn.Module):
         for weight in self.parameters():
             weight.data.uniform_(-stdv, stdv)
 
-    def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor) -> \
-            Tuple[Tuple[torch.Tensor, torch.Tensor], 
-            Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]]:
+    def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_size, _ = z_real.size()
         hidden_seq_real, hidden_seq_imag = [], []
         h_t_real = torch.zeros(batch_size, self.hidden_size).to(z_real.device)
@@ -104,4 +99,16 @@ class ComplexLSTMLayer(nn.Module):
         hidden_seq_imag = torch.cat(hidden_seq_imag, dim=0)
         hidden_seq_imag = hidden_seq_imag.transpose(0, 1).contiguous()
 
-        return (hidden_seq_real, hidden_seq_imag), ((h_t_real, h_t_imag), (c_t_real, c_t_imag))
+        return hidden_seq_real, hidden_seq_imag
+
+class ComplexBLSTMLayer(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int) -> None:
+        super(ComplexBLSTMLayer, self).__init__()
+        self.forward_layer = ComplexLSTMLayer(input_size, hidden_size)
+        self.reverse_layer = ComplexLSTMLayer(input_size, hidden_size)
+
+    def forward(self, z_real: torch.Tensor, z_imag: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        hf_real, hf_imag = self.forward_layer(z_real, z_imag)
+        hr_real, hr_imag = self.reverse_layer(torch.flip(z_real, dims=(1,)), torch.flip(z_imag, dims=(1,)))
+        return torch.cat((hf_real, torch.flip(hr_real, dims=(1,))), dim=-1), \
+               torch.cat((hf_imag, torch.flip(hr_imag, dims=(1,))), dim=-1)

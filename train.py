@@ -62,8 +62,6 @@ def main():
     parser.add_argument("--weight-decay", type=float, default=0, help="Decaimiento de los pesos de Adam")
     parser.add_argument("--workers", type=int, default=0, help="Número de workers para cargar los datos")
 
-    subparsers = parser.add_subparsers(help="Tipo de modelo", dest="model")
-
     args = parser.parse_args()
 
     torch.autograd.set_detect_anomaly(True)
@@ -114,7 +112,7 @@ def main():
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
 
-        t.set_postfix(train_loss=train_loss, valid_loss=valid_loss)
+        t.set_postfix(train=train_loss, valid=valid_loss)
 
         state = {
             "args": model_args,

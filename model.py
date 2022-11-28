@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from blocks import *
-from lstm import ComplexLSTMLayer
+from lstm import ComplexBLSTMLayer
 from utils import *
 
 class Model(nn.Module):
@@ -15,8 +15,8 @@ class Model(nn.Module):
 
         self.out_enc_size = bins // (2 ** (layers - 1))
 
-        self.lstm = ComplexLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 3)), hidden_size=256)
-        self.linear = ComplexLinear(in_features=256, out_features=self.out_enc_size * (2 ** (self.layers + 3)))
+        self.blstm = ComplexBLSTMLayer(input_size=self.out_enc_size * (2 ** (self.layers + 3)), hidden_size=256)
+        self.linear = ComplexLinear(in_features=512, out_features=self.out_enc_size * (2 ** (self.layers + 3)))
 
         self.decoders = nn.ModuleList([DecoderBlock(2**i, 2**(i-1), 2**(i-1)) 
                                        for i in range(layers + 3, 4, -1)])
@@ -47,7 +47,7 @@ class Model(nn.Module):
         z_real = z_real.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
         z_imag = z_imag.transpose(1, 3).reshape(batch_size, -1, self.out_enc_size * (2 ** (self.layers + 3)))
 
-        (z_real, z_imag), _ = self.lstm(z_real, z_imag)
+        z_real, z_imag = self.blstm(z_real, z_imag)
         z_real, z_imag = self.linear(z_real, z_imag)
 
         z_real = z_real.reshape(batch_size, -1, self.out_enc_size, (2 ** (self.layers + 3))).transpose(1, 3)
