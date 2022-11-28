@@ -3,13 +3,13 @@ from accelerate import Accelerator
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from torch.nn import MSELoss
+from torch.nn import L1Loss
 from dataset import MUSDB18Dataset
 from model import Model
 
 def train(model, train_loader, optimizer, accelerator):
     model.train()
-    loss_function = MSELoss()
+    loss_function = L1Loss()
     pbar = tqdm.tqdm(train_loader)
     for x, y in pbar:
         pbar.set_description("Entrenando batch")
@@ -36,7 +36,7 @@ def valid(model, valid_loader, accelerator):
             y_hat, y = accelerator.gather_for_metrics((y_hat, y))
 
             loss = loss_function(y_hat, y)
-            accelerator.print(f"loss: {loss}, NaN: (y_hat: {torch.any(torch.isnan(y_hat))}, y: {torch.any(torch.isnan(y_hat))})")
+            accelerator.print(f"loss: {loss}")
             batch_loss += loss.item() * y.size(0)
             count += y.size(0)
         return batch_loss / count
